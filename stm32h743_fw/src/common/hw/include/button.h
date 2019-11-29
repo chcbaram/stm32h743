@@ -24,6 +24,7 @@ extern "C" {
 bool     buttonInit(void);
 void     buttonEnable(bool enable);
 void     buttonResetTime(uint8_t ch);
+bool     buttonGetPin(uint8_t ch);
 bool     buttonGetPressed(uint8_t ch);
 bool     buttonGetPressedEvent(uint8_t ch);
 uint32_t buttonGetPressedTime(uint8_t ch);

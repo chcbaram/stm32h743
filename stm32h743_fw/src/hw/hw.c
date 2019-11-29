@@ -43,6 +43,8 @@ __attribute__((section(".tag"))) flash_tag_t fw_tag =
 
 void hwInit(void)
 {
+  bool ret = false;
+
   bspInit();
 
   resetInit();
@@ -75,7 +77,14 @@ void hwInit(void)
 
   usbInit();
 
-  if (buttonGetPressed(_DEF_BUTTON2) == true)
+
+  if (sdInit() == true)
+  {
+    ret = fatfsInit();
+  }
+
+
+  if (buttonGetPin(_DEF_BUTTON2) == true && ret == true)
   {
     logPrintf("usb mode   \t\t: USB_MSC\r\n");
     usbBegin(USB_MSC_MODE);
@@ -86,13 +95,6 @@ void hwInit(void)
     usbBegin(USB_CDC_MODE);
     vcpInit();
   }
-
-
-  if (sdInit() == true)
-  {
-    fatfsInit();
-  }
-
 
 
   qspiInit();
