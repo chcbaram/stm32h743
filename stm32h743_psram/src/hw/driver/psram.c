@@ -92,7 +92,7 @@ bool psramInit(void)
       psram_tbl[0].length = PSRAM_MAX_SIZE;
 
       psramEnterQPI();
-      psramEnterMemoyMaped();
+      //sramEnterMemoyMaped();
     }
     ret = psram_tbl[0].is_init;
   }
@@ -136,14 +136,13 @@ bool psramSetup(void)
     return false;
   }
 
+  psramExitQPI();
+
 
   if (psramReset() != true)
   {
     return false;
   }
-
-
-  psramExitQPI();
 
   return ret;
 }
@@ -327,7 +326,74 @@ bool psramEnterMemoyMaped(void)
   return ret;
 }
 
+bool psramRead(uint32_t addr, uint8_t *p_data, uint32_t length)
+{
+  bool ret = true;
+  QSPI_CommandTypeDef s_command;
 
+
+  /* Initialize the read flag status register command */
+  s_command.InstructionMode   = QSPI_INSTRUCTION_4_LINES;
+  s_command.Instruction       = PSRAM_CMD_LUT_SEQ_IDX_READ_QPI;
+  s_command.AddressMode       = QSPI_ADDRESS_4_LINES;
+  s_command.AddressSize       = QSPI_ADDRESS_24_BITS;
+  s_command.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  s_command.DataMode          = QSPI_DATA_4_LINES;
+  s_command.DummyCycles       = 6;
+  s_command.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  s_command.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  s_command.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  s_command.Address = addr;
+  s_command.NbData  = length;
+
+  if (HAL_QSPI_Command(&QSPIHandle, &s_command, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    return false;
+  }
+
+  if (HAL_QSPI_Receive(&QSPIHandle, p_data, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    return false;
+  }
+  return ret;
+}
+
+bool psramWrite(uint32_t addr, uint8_t *p_data, uint32_t length)
+{
+  bool ret = true;
+  QSPI_CommandTypeDef s_command;
+
+
+  /* Initialize the read flag status register command */
+  s_command.InstructionMode   = QSPI_INSTRUCTION_4_LINES;
+  s_command.Instruction       = PSRAM_CMD_LUT_SEQ_IDX_WRITE_QPI;
+  s_command.AddressMode       = QSPI_ADDRESS_4_LINES;
+  s_command.AddressSize       = QSPI_ADDRESS_24_BITS;
+  s_command.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE;
+  s_command.DataMode          = QSPI_DATA_4_LINES;
+  s_command.DummyCycles       = 0;
+  s_command.DdrMode           = QSPI_DDR_MODE_DISABLE;
+  s_command.DdrHoldHalfCycle  = QSPI_DDR_HHC_ANALOG_DELAY;
+  s_command.SIOOMode          = QSPI_SIOO_INST_EVERY_CMD;
+
+  s_command.Address = addr;
+  s_command.NbData  = length;
+
+  /* Configure the command */
+  if (HAL_QSPI_Command(&QSPIHandle, &s_command, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    return false;
+  }
+
+  /* Transmission of the data */
+  if (HAL_QSPI_Transmit(&QSPIHandle, p_data, HAL_QPSI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
+  {
+    return false;
+  }
+
+  return ret;
+}
 
 
 /* Definition for QSPI clock resources */
@@ -442,9 +508,6 @@ void psramPinInit(QSPI_HandleTypeDef *hqspi, void *Params)
 void psramCmdif(void)
 {
   bool ret = true;
-  uint8_t number;
-  uint32_t i;
-  uint32_t pre_time;
 
 
   if (cmdifGetParamCnt() == 1)
@@ -471,54 +534,36 @@ void psramCmdif(void)
   {
     if(cmdifHasString("test", 0) == true)
     {
-      uint32_t *p_data = (uint32_t *)psram_addr;
+      uint32_t w_data[128];
+      uint32_t r_data[128];
 
-      number = (uint8_t)cmdifGetParam(1);
-
-      while(number > 0)
+      for (int i=0; i<128; i++)
       {
-        pre_time = millis();
-        for (i=0; i<psram_length/4; i++)
-        {
-          p_data[i] = i;
-        }
-        cmdifPrintf( "Write : %d MB/s\n", psram_length / 1000 / (millis()-pre_time) );
+        w_data[i] = i;
+        r_data[i] = 0;
+      }
 
-        volatile uint32_t data_sum = 0;
-        pre_time = millis();
-        for (i=0; i<psram_length/4; i++)
-        {
-          data_sum += p_data[i];
-        }
-        cmdifPrintf( "Read : %d MB/s\n", psram_length / 1000 / (millis()-pre_time) );
+      if (psramWrite(0, (uint8_t *)&w_data, 128*sizeof(uint32_t)) == true)
+      {
+        cmdifPrintf("PSRAM Write OK\n");
+      }
+      else
+      {
+        cmdifPrintf("PSRAM Write Fail\n");
+      }
 
+      if (psramRead(0, (uint8_t *)&r_data, 128*sizeof(uint32_t)) == true)
+      {
+        cmdifPrintf("PSRAM Read OK\n");
+      }
+      else
+      {
+        cmdifPrintf("PSRAM Read Fail\n");
+      }
 
-        for (i=0; i<psram_length/4; i++)
-        {
-          if (p_data[i] != i)
-          {
-            cmdifPrintf( "%d : 0x%X fail\n", i, p_data[i]);
-            break;
-          }
-        }
-
-        if (i == psram_length/4)
-        {
-          cmdifPrintf( "Count %d\n", number);
-          cmdifPrintf( "PSRAM %d MB OK\n\n", psram_length/1024/1024);
-          for (i=0; i<psram_length/4; i++)
-          {
-            p_data[i] = 0x5555AAAA;
-          }
-        }
-
-        number--;
-
-        if (cmdifRxAvailable() > 0)
-        {
-          cmdifPrintf( "Stop test...\n");
-          break;
-        }
+      for (int i=0; i<128; i++)
+      {
+        cmdifPrintf("Data %d:%d \n", w_data[i], r_data[i]);
       }
     }
     else

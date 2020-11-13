@@ -24,6 +24,8 @@ bool psramInit(void);
 
 uint32_t psramGetAddr(void);
 uint32_t psramGetLength(void);
+bool psramRead(uint32_t addr, uint8_t *p_data, uint32_t length);
+bool psramWrite(uint32_t addr, uint8_t *p_data, uint32_t length);
 
 #endif
 
